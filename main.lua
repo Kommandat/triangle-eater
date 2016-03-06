@@ -229,15 +229,19 @@ function beginContact(a, b, coll)
     b_key = b:getUserData()
 
     if((a_key == 0) and (b_key ~= 0)) then
-        
+
+        -- Calculate area of fixture b
+        local area = fixtureArea(b)
+
         local v1, v2, v3 = {}, {}, {}
-        v1.x, v1.y, v2.x, v2.y, v3.x, v3.y =  b:getShape():getPoints()
+        v1.x, v1.y, v2.x, v2.y, v3.x, v3.y = a:getBody():getWorldPoints(a:getShape():getPoints())
         
         local vertices = {v1, v2, v3}
-        local area = calculateArea(v1.x, v2.y, v2.x, v2.y, v3.x, v3.y)
+        print("Original         :  " .. v1.x .. ", " .. v1.y .. " and " .. v2.x ..  ",  " .. v2.y .. " and " .. v3.x .. ", " .. v3.y )
 
-        -- To add an ear to a, we need to find the vertices we
-        -- need to add.
+
+        -- To add an ear to a, we need to find the vertices of the ear
+        -- we want to add.
 
         -- Find point of collision
         local col = {}
@@ -246,14 +250,21 @@ function beginContact(a, b, coll)
         -- Find two nearest vertices in fixture a
         local new_v1, new_v2 = findTwoNearest(vertices, col)
 
-        print(new_v1.x .. ", " .. new_v1.y .. " and " .. new_v2.x .. ", " .. new_v2.y )
+        print("2 Nearest (world) : " .. new_v1.x .. ", " .. new_v1.y .. " and " .. new_v2.x .. ", " .. new_v2.y )
+
+        -- Change the new vertices to local coordinates relative to a
+        new_v1.x, new_v1.y = a:getBody():getLocalPoint(new_v1.x, new_v1.y)
+        new_v2.x, new_v2.y = a:getBody():getLocalPoint(new_v2.x, new_v2.y)
+
+        print("Collision         : " .. col.x .. ", " .. col.y)
+        print("2 Nearest (local) : " .. new_v1.x .. ", " .. new_v1.y .. " and " .. new_v2.x .. ", " .. new_v2.y )
 
         -- Find third vertex that provides the necessary area
         local new_v3 = findEarVertex(new_v1, new_v2, area, a)
 
         print(new_v3.x .. ", " .. new_v3.y)
 
-        local ear = love.physics.newPolygonShape(v1.x, v1.y, v2.x, v2.y, v3.x, v3.y)
+        local ear = love.physics.newPolygonShape(new_v1.x, new_v1.y, new_v2.x, new_v2.y, new_v3.x, new_v3.y)
 
         table.insert(remFixtures, b)
         table.insert(toAdd, ear)
@@ -263,22 +274,46 @@ function beginContact(a, b, coll)
     end
 end
 
+function fixtureArea(fixture)
+    return calculateArea(fixture:getShape():getPoints())
+end
 
 function findTwoNearest(points, target)
+
     local v1, v2 = points[1], points[2]
+    
     local dist = 0
-    local minDist = 0x7FFFFF -- Basically INT_MAX
+    
+    local minDist  = 0x7FFFFF -- Basically INT_MAX
+    local min2Dist = 0x7FFFFF -- Basically INT_MAX
 
     for i, point in ipairs(points) do 
         dist = distance(point, target)
         if (dist < minDist) then
-            distance(point, target)
+
+            min2Dist = minDist
+            minDist = dist
             v2 = v1
             v1 = point
+
+        elseif (dist < min2Dist) then 
+
+            min2Dist = dist
+            v2 = point
+        
         end
     end
 
     return v1, v2
+end
+
+function math.dist(x1,y1,x2,y2)
+    return ((x2-x1)^2+(y2-y1)^2)^0.5
+end
+
+
+function distance(p1, p2)
+    return math.dist(p1.x, p1.y, p2.x, p2.y)
 end
 
 function findEarVertex(p1, p2, area, fixture)
@@ -288,11 +323,11 @@ function findEarVertex(p1, p2, area, fixture)
 
     local midPt  = {}
     midPt.x = (p1.x + p2.x)/2
-    midPt.y = (p1.y+ p2.y)/2
+    midPt.y = (p1.y + p2.y)/2
 
     -- Now we need to find the perp bisector of the triangle
     local perp = {}
-    perp.x, perp.y = (p1.x - p2.x), (p1.y - p1.y)
+    perp.x, perp.y = (p1.x - p2.x), (p1.y - p2.y)
     perp.x, perp.y = normalize(perp)
     perp.x, perp.y = height*perp.x, height*perp.y
     
@@ -302,7 +337,7 @@ function findEarVertex(p1, p2, area, fixture)
     choice2 = {}
     choice2.x, choice2.y = midPt.x - perp.y, midPt.y + perp.x
 
-    if (fixture:testPoint(choice1.x, choice1.y)) then
+    if (fixture:testPoint(fixture:getBody():getWorldPoint(choice1.x, choice1.y))) then
         return choice2
     else
         return choice1
@@ -321,15 +356,6 @@ end
 
 function magnitude(vector)
     return math.sqrt(vector.x^2 + vector.y^2)
-end
-
-function math.dist(x1,y1,x2,y2)
-    return ((x2-x1)^2+(y2-y1)^2)^0.5
-end
-
-
-function distance(p1, p2)
-    return math.dist(p1.x, p1.y, p2.x, p2.y)
 end
 
 function addEar(fixture, area)
