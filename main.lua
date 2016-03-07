@@ -16,6 +16,12 @@ function love.load()
     border = 25
     sideLength = 100
 
+    -- The table we pick our colors from
+    -- Source: http://www.color-hex.com/color-palette/15968
+    colors = {{235,189,240}, {236,179,179}, {247,251,184}, {189,241,249}, {249,186,253}}
+    -- Initialize color count to 0
+    colorCount = 0
+
     -- A table to hold all of our game objects
     objects = {}
 
@@ -32,18 +38,12 @@ function love.load()
     addEnemy()
     
     --initial graphics setup
-    love.graphics.setBackgroundColor(104, 136, 248) --set the background color to a nice blue
+    love.graphics.setBackgroundColor(230, 250, 250) --set the background color to a nice blue
     love.window.setMode(650, 650) --set the window dimensions to 650 by 650 with no fullscreen, vsync on, and no antialiasing
 
     -- These tables contain things to delete/add
     remFixtures = {}
     toAdd       = {}
-
-    -- The table we pick our colors from
-    -- Source: http://www.color-hex.com/color-palette/15968
-    colors = {{235,189,240}, {236,179,179}, {247,251,184}, {189,241,249}, {249,186,253}}
-    -- Initialize color count to 0
-    colorCount = 0
 end
 
 function love.update(dt)
@@ -73,14 +73,16 @@ function love.draw()
     -- love.graphics.translate(objects.player.body:getX(), objects.player.body:getY())
 
     for key,fixture in ipairs(objects.player.body:getFixtureList()) do
-        love.graphics.setColor(getColor())
+        local color = getColor(fixture:getGroupIndex())
+        love.graphics.setColor(color)
         love.graphics.polygon("fill", objects.player.body:getWorldPoints(fixture:getShape():getPoints())) 
     end
 
     for key,enemy in ipairs(objects.enemies) do
         for key,fixture in ipairs(enemy.body:getFixtureList()) do
             local shape = fixture:getShape()
-            love.graphics.setColor(getColor())
+            local color = getColor(fixture:getGroupIndex())
+            love.graphics.setColor(color)
             love.graphics.polygon("fill", enemy.body:getWorldPoints(shape:getPoints())) 
         end
     end
@@ -153,6 +155,9 @@ function initPlayer()
     objects.player.fixture = love.physics.newFixture(objects.player.body,
                                                      objects.player.triangles[1].shape, 1)
 
+    objects.player.fixture:setGroupIndex(colorCount)
+    colorCount = colorCount + 1
+
     -- local ear = love.physics.newPolygonShape(ax, ay, bx, by, -20, 46.188)
     -- love.physics.newFixture(objects.player.body, ear, 1)
 
@@ -176,12 +181,6 @@ function addEnemy()
     local pos_y = love.math.random(length, windowHeight - length)
     enemy.body = love.physics.newBody(world, pos_x, pos_y)
 
-    -- Add one triangle at center to triangles
-    enemy.triangles = {}
-    enemy.triangles[1] = {}
-    enemy.triangles[1].color = {}
-    enemy.triangles[1].color = {250, 50, 50}
-
     local ax = 0
     local ay = centroidLength
 
@@ -191,12 +190,12 @@ function addEnemy()
     local cx = length/2
     local cy = -centroidLength/2
 
-    enemy.triangles[1].shape = love.physics.newPolygonShape(ax, ay, bx, by, cx, cy)
-    enemy.triangles[1].area  = calculateArea(ax, ay, bx, by, cx, cy)
+    local shape = love.physics.newPolygonShape(ax, ay, bx, by, cx, cy)
 
     -- Fix triangle to enemy with density of 1
-    enemy.fixture = love.physics.newFixture(enemy.body,
-                                                     enemy.triangles[1].shape, 1)
+    enemy.fixture = love.physics.newFixture(enemy.body, shape, 1)
+    enemy.fixture:setGroupIndex(colorCount)
+    colorCount = colorCount + 1
     
     enemy.fixture:setUserData(enemyNum)
     objects.enemies[enemyNum] = enemy
@@ -219,6 +218,8 @@ function addEars()
         table.remove(toAdd, i)
         local fix = love.physics.newFixture(objects.player.body, ear, 1) 
         fix:setUserData(0)
+        fix:setGroupIndex(colorCount)
+        colorCount = colorCount + 1
     end
 end
 
@@ -382,9 +383,8 @@ function calculateArea(ax, ay, bx, by, cx, cy)
     return math.abs((ax*(by - cy) + bx*(cy - ay) + cx*(ay - by))/2)
 end
 
-function getColor()
-    colorCount = colorCount + 1
-    return colors[(colorCount%5) + 1]
+function getColor(index)
+    return colors[(index%5) + 1]
 end
 
 
