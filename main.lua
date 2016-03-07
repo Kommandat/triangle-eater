@@ -38,6 +38,12 @@ function love.load()
     -- These tables contain things to delete/add
     remFixtures = {}
     toAdd       = {}
+
+    -- The table we pick our colors from
+    -- Source: http://www.color-hex.com/color-palette/15968
+    colors = {{235,189,240}, {236,179,179}, {247,251,184}, {189,241,249}, {249,186,253}}
+    -- Initialize color count to 0
+    colorCount = 0
 end
 
 function love.update(dt)
@@ -66,21 +72,15 @@ function love.draw()
 
     -- love.graphics.translate(objects.player.body:getX(), objects.player.body:getY())
 
-    -- TODO
-    for key,component in ipairs(objects.border) do
-        love.graphics.setColor(72, 160, 14)
-        love.graphics.polygon("fill", component.body:getWorldPoints(component.shape:getPoints()))
-    end
-
     for key,fixture in ipairs(objects.player.body:getFixtureList()) do
-        love.graphics.setColor(50,50,50)
+        love.graphics.setColor(getColor())
         love.graphics.polygon("fill", objects.player.body:getWorldPoints(fixture:getShape():getPoints())) 
     end
 
     for key,enemy in ipairs(objects.enemies) do
         for key,fixture in ipairs(enemy.body:getFixtureList()) do
             local shape = fixture:getShape()
-            love.graphics.setColor(250, 50, 50)
+            love.graphics.setColor(getColor())
             love.graphics.polygon("fill", enemy.body:getWorldPoints(shape:getPoints())) 
         end
     end
@@ -94,24 +94,29 @@ function initBorder()
     objects.border.ground.body = love.physics.newBody(world, windowWidth/2, windowHeight-border/2) --remember, the shape (the rectangle we create next) anchors to the body from its center, so we have to move it to (650/2, 650-50/2)
     objects.border.ground.shape = love.physics.newRectangleShape(windowWidth, border) --make a rectangle with a width of 650 and a height of 25
     objects.border.ground.fixture = love.physics.newFixture(objects.border.ground.body, objects.border.ground.shape) --attach shape to body
-    
+    objects.border.ground.fixture:setUserData(-1)
+
+
     objects.border.ceiling = {}
     objects.border.ceiling.body = love.physics.newBody(world, windowWidth/2, border/2)
     objects.border.ceiling.shape = love.physics.newRectangleShape(windowWidth, border) --make a rectangle with a width of 650 and a height of 25
     objects.border.ceiling.fixture = love.physics.newFixture(objects.border.ceiling.body, objects.border.ceiling.shape) --attach shape to body    
+    objects.border.ceiling.fixture:setUserData(-1)
+
 
     -- Next both walls
     objects.border.leftwall = {}
     objects.border.leftwall.body = love.physics.newBody(world, border/2, windowHeight/2) --remember, the shape (the rectangle we create next) anchors to the body from its center, so we have to move it to (650/2, 650-50/2)
     objects.border.leftwall.shape = love.physics.newRectangleShape(border, windowHeight - 2*border) --make a rectangle with a width of 650 and a height of 25
     objects.border.leftwall.fixture = love.physics.newFixture(objects.border.leftwall.body, objects.border.leftwall.shape) --attach shape to body
-    
+    objects.border.leftwall.fixture:setUserData(-1)
+
     objects.border.rightwall = {}
     objects.border.rightwall.body = love.physics.newBody(world, windowWidth-border/2, windowHeight/2)
     objects.border.rightwall.shape = love.physics.newRectangleShape(border, windowHeight - 2*border) --make a rectangle with a width of 650 and a height of 25
     objects.border.rightwall.fixture = love.physics.newFixture(objects.border.rightwall.body, objects.border.rightwall.shape) --attach shape to body
+    objects.border.rightwall.fixture:setUserData(-1)
 end
-
 
 -- The player contains several triangles. Each of which includes a color, 
 --- physics.shape and area . When we initialize, we give the player just one eq
@@ -201,77 +206,76 @@ end
 -- TODO: The fixture is still drawn on the screen
 function cleanUp()
     for i, fixture in ipairs(remFixtures) do
-        fixture:destroy()
-        table.remove(remFixtures, i)
-        addEnemy()
+        if (fixture ~= nil) then
+            fixture:destroy()
+            table.remove(remFixtures, i)
+            addEnemy()
+        end
     end
 end
 
 function addEars()
     for i, ear in ipairs(toAdd) do
-        print("reached")
         table.remove(toAdd, i)
         local fix = love.physics.newFixture(objects.player.body, ear, 1) 
         fix:setUserData(0)
-
-        for i,fixture in ipairs(objects.player.body:getFixtureList()) do
-            print(fixture:getUserData())
-        end
-
-        print("\n")
     end
 end
 
 function beginContact(a, b, coll)
 
     -- Find who collided with whom
-    a_key = a:getUserData()
-    b_key = b:getUserData()
+    local a_key = a:getUserData()
+    local b_key = b:getUserData()
 
-    if((a_key == 0) and (b_key ~= 0)) then
-
-        -- Calculate area of fixture b
-        local area = fixtureArea(b)
-
-        local v1, v2, v3 = {}, {}, {}
-        v1.x, v1.y, v2.x, v2.y, v3.x, v3.y = a:getBody():getWorldPoints(a:getShape():getPoints())
-        
-        local vertices = {v1, v2, v3}
-        print("Original         :  " .. v1.x .. ", " .. v1.y .. " and " .. v2.x ..  ",  " .. v2.y .. " and " .. v3.x .. ", " .. v3.y )
-
-
-        -- To add an ear to a, we need to find the vertices of the ear
-        -- we want to add.
-
-        -- Find point of collision
-        local col = {}
-        col.x, col.y = coll:getPositions()
-        
-        -- Find two nearest vertices in fixture a
-        local new_v1, new_v2 = findTwoNearest(vertices, col)
-
-        print("2 Nearest (world) : " .. new_v1.x .. ", " .. new_v1.y .. " and " .. new_v2.x .. ", " .. new_v2.y )
-
-        -- Change the new vertices to local coordinates relative to a
-        new_v1.x, new_v1.y = a:getBody():getLocalPoint(new_v1.x, new_v1.y)
-        new_v2.x, new_v2.y = a:getBody():getLocalPoint(new_v2.x, new_v2.y)
-
-        print("Collision         : " .. col.x .. ", " .. col.y)
-        print("2 Nearest (local) : " .. new_v1.x .. ", " .. new_v1.y .. " and " .. new_v2.x .. ", " .. new_v2.y )
-
-        -- Find third vertex that provides the necessary area
-        local new_v3 = findEarVertex(new_v1, new_v2, area, a)
-
-        print(new_v3.x .. ", " .. new_v3.y)
-
-        local ear = love.physics.newPolygonShape(new_v1.x, new_v1.y, new_v2.x, new_v2.y, new_v3.x, new_v3.y)
-
-        table.insert(remFixtures, b)
-        table.insert(toAdd, ear)
-
-    elseif (a:getUserData() == "player") then
-
+    if ((a_key == 0) and (b_key > 0)) then
+        local player, enemy = a, b
+        eat(a, b, coll)
+    elseif ((a_key > 0) and (b_key == 0)) then
+        eat(b, a, coll)
     end
+
+end
+
+function eat(predator, prey, coll) 
+
+    local predBody  = predator:getBody()
+    local predShape = predator:getShape()
+
+    local preyBody  = prey:getBody()
+    local preyShape = prey:getShape()
+
+    -- Calculate prey's area
+    local area = fixtureArea(prey)
+
+    -- Get predator vertices
+    local v1, v2, v3 = {}, {}, {}
+    v1.x, v1.y, v2.x, v2.y, v3.x, v3.y = predBody:getWorldPoints(predShape:getPoints())
+    local vertices = {v1, v2, v3}
+
+    -- To add an ear to a, we need to find the vertices of the ear
+    -- we want to add.
+
+    -- Find point of collision
+    local col = {}
+    col.x, col.y = coll:getPositions()
+        
+    -- Find two nearest vertices in fixture predator
+    local new_v1, new_v2 = findTwoNearest(vertices, col)
+
+    -- Change the new vertices to local coordinates relative to predator
+    new_v1.x, new_v1.y = predator:getBody():getLocalPoint(new_v1.x, new_v1.y)
+    new_v2.x, new_v2.y = predator:getBody():getLocalPoint(new_v2.x, new_v2.y)
+
+    -- Find third vertex that provides the necessary area
+    local new_v3 = findEarVertex(new_v1, new_v2, area, predator)
+
+    print(new_v3.x .. ", " .. new_v3.y)
+
+    local ear = love.physics.newPolygonShape(new_v1.x, new_v1.y, new_v2.x, new_v2.y, new_v3.x, new_v3.y)
+
+    table.insert(remFixtures, prey)
+    table.insert(toAdd, ear)
 end
 
 function fixtureArea(fixture)
@@ -374,9 +378,13 @@ function postSolve(a, b, coll, normalimpulse, tangentimpulse)
  
 end
 
-
 function calculateArea(ax, ay, bx, by, cx, cy)
     return math.abs((ax*(by - cy) + bx*(cy - ay) + cx*(ay - by))/2)
+end
+
+function getColor()
+    colorCount = colorCount + 1
+    return colors[(colorCount%5) + 1]
 end
 
 
